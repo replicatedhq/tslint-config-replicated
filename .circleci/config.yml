@@ -1,0 +1,60 @@
+version: 2
+jobs:
+  test:
+    working_directory: ~/repo
+    docker:
+      - image: 'circleci/node:10'
+    steps:
+      - checkout
+      - restore_cache:
+          name: Restore Yarn Package Cache
+          keys:
+            - 'yarn-packages-{{ checksum "yarn.lock" }}'
+      - run:
+          name: Install Dependencies
+          command: yarn --frozen-lockfile
+      - run:
+          name: Lint
+          command: yarn lint
+      - run:
+          name: Build
+          command: yarn build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - node_modules
+      - save_cache:
+          name: Save Yarn Package Cache
+          key: 'yarn-packages-{{ checksum "yarn.lock" }}'
+          paths:
+            - ~/.cache/yarn
+  deploy:
+    working_directory: ~/repo
+    docker:
+      - image: 'circleci/node:10'
+    steps:
+      - run: |
+          if [ "${CIRCLE_PROJECT_USERNAME}" != "replicatedhq" ]; then
+            echo nope nope nope
+            exit 1
+          fi
+      - checkout
+      - attach_workspace:
+          at: .
+      - deploy:
+          name: publish
+          command: |
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+            npm publish
+workflows:
+  version: 2
+  build_accept_deploy:
+    jobs:
+      - test
+      - deploy:
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - master
